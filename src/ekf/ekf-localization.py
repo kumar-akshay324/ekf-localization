@@ -39,32 +39,36 @@ def main(barcode_data_file, landmark_gt_data_file, robot_data_files):
     robot_measurement_data, \
     robot_odometry_data = getDataFromFiles(barcode_data_file, landmark_gt_data_file, robot_data_files)
 
+    robot_groundtruth_data["t"] = robot_groundtruth_data["t"] - robot_groundtruth_data.at[0, "t"]
+    robot_measurement_data["t"] = robot_measurement_data["t"] - robot_measurement_data.at[0, "t"]
+    robot_odometry_data["t"] = robot_odometry_data["t"] - robot_odometry_data.at[0, "t"]
+
     fig = plt.figure(constrained_layout=True)
     grids = fig.add_gridspec(4, 2)
 
     fig_ax0 = fig.add_subplot(grids[0:2,0])
     fig_ax0.set_title("Landmark Groundtruth")
-    plotLandmarksGroundtruth(fig_ax0, "landmark_groundtruth_data", landmark_groundtruth_data, 'r')
+    plotLandmarksGroundtruth(fig_ax0, "landmark_groundtruth_data", landmark_groundtruth_data, barcode_data, 'r')
 
     fig_ax1 = fig.add_subplot(grids[0:2,1])
-    fig_ax1.set_title("Robot Poses")
+    fig_ax1.set_title("Robot Grountruth Poses")
     plotRobotPose(fig_ax1, "robot_groundtruth_data", robot_groundtruth_data, 'r')
     robot_groundtruth_sampled_data = sampleData("robot_groundtruth_data", robot_groundtruth_data, SAMPLE_TIME)
-    # plotRobotPose(ax[0,1], "robot_groundtruth_data", robot_groundtruth_sampled_data, 'b')
+    plotRobotPose(fig_ax1, "robot_groundtruth_data", robot_groundtruth_sampled_data, 'b')
 
     fig_ax2_0 = fig.add_subplot(grids[2,0])
     fig_ax2_1 = fig.add_subplot(grids[3,0])
 
     plotRobotMeasurement(fig_ax2_0, fig_ax2_1, "robot_measurement_data", robot_measurement_data, 'g')
     robot_measurement_sampled_data = sampleData("robot_measurement_data", robot_measurement_data, SAMPLE_TIME)
-    # plotRobotMeasurement(ax[1,0], "robot_measurement_data", robot_measurement_sampled_data, 'g')
+    plotRobotMeasurement(fig_ax2_0, fig_ax2_1, "robot_measurement_data", robot_measurement_sampled_data, 'r')
 
     fig_ax3_0 = fig.add_subplot(grids[2,1])
     fig_ax3_1 = fig.add_subplot(grids[3,1])
 
     plotRobotOdometry(fig_ax3_0, fig_ax3_1, "robot_odometry_data", robot_odometry_data, 'g')
     robot_odometry_sampled_data = sampleData("robot_odometry_data", robot_odometry_data, SAMPLE_TIME)
-    # plotRobotOdometry(ax[1,1], "robot_odometry_data", robot_odometry_sampled_data, 'g')
+    plotRobotOdometry(fig_ax3_0, fig_ax3_1, "robot_odometry_data", robot_odometry_sampled_data, 'r')
 
     plt.show()
 
