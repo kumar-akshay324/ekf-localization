@@ -1,1 +1,3 @@
 docs/
+src/utils/__pycache__
+src/ekf/__pycache__/

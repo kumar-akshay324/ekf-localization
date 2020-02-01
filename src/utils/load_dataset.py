@@ -3,6 +3,7 @@
 import sys
 import os
 
+import math
 import pandas as pd
 
 global DATASET_FOLDER_LOCATION
@@ -49,29 +50,23 @@ def getDataFiles(folder_name, robot_name):
 	return barcode_data_file, landmark_gt_data_file, robot_data_files
 
 def getDataFromFiles(barcode_data_file, landmark_gt_data_file, robot_data_files):
-
 	global DATASET_FOLDER_LOCATION
-
 	barcode_data_file = DATASET_FOLDER_LOCATION + "/" + barcode_data_file
-	getBarCodeData(barcode_data_file)
+	barcode_data = getBarCodeData(barcode_data_file)
 
 	landmark_gt_data_file = DATASET_FOLDER_LOCATION + "/" + landmark_gt_data_file
-	getLandmarkGrouthtruthData(landmark_gt_data_file)
+	landmark_groundtruth_data = getLandmarkGrouthtruthData(landmark_gt_data_file)
 
 	robot_gt_data_file = DATASET_FOLDER_LOCATION + "/" + robot_data_files["groundtruth_filename"]
-	getRobotGrouthtruthData(robot_gt_data_file)
+	robot_groundtruth_data = getRobotGrouthtruthData(robot_gt_data_file)
 
 	robot_measurement_data_file = DATASET_FOLDER_LOCATION + "/" + robot_data_files["measurement_filename"]
-	getRobotMeasurementData(robot_measurement_data_file)
+	robot_measurement_data = getRobotMeasurementData(robot_measurement_data_file)
 
 	robot_measurement_odometry_file = DATASET_FOLDER_LOCATION + "/" + robot_data_files["odometry_filename"]
-	getRobotOdometryData(robot_measurement_odometry_file)
+	robot_odometry_data = getRobotOdometryData(robot_measurement_odometry_file)
 
-	# file_locations = {"name": robot_data_files["name"]}
-	# for key in robot_data_files.keys():
-	# 	if key is not "name":
-	# 		file_locations[key] = os.getcwd() + "/" + robot_data_files[key]
-	# print ("File full path: %s \n" %(file_locations))
+	return barcode_data, landmark_groundtruth_data, robot_groundtruth_data, robot_measurement_data, robot_odometry_data
 
 def getBarCodeData(barcode_file):
 	# Dictionary with entity number : Barcode where entity number 1 to 5 are the 5 robots and 6 to 20 are the 15 landmarks
@@ -89,7 +84,7 @@ def getBarCodeData(barcode_file):
 				except:
 					pass
 			entity_barcodes[updated_line_content[0]] = updated_line_content[1]
-	print ( "Entity Barcode Content:\n %s \n" %(str(entity_barcodes)))
+	# print ( "Entity Barcode Content:\n %s \n" %(str(entity_barcodes)))
 	return entity_barcodes
 
 def getLandmarkGrouthtruthData(landmark_gt_data_file):
@@ -145,7 +140,7 @@ def getRobotGrouthtruthData(robot_gt_data_file):
 			theta.append(updated_line_content[3])
 	
 	robot_groundtruth_data = pd.DataFrame({"t": t, "x": x, "y": y, "theta": theta})
-	print ( "Robot Groundtruth Line Content:\n %s \n" %(str(robot_groundtruth_data)))
+	# print ( "Robot Groundtruth Line Content:\n %s \n" %(str(robot_groundtruth_data)))
 	return robot_groundtruth_data
 
 def getRobotMeasurementData(robot_measurement_data_file):
@@ -180,7 +175,7 @@ def getRobotMeasurementData(robot_measurement_data_file):
 			data_bearing.append(updated_line_content[3])
 	
 	robot_measurement_data = pd.DataFrame({"t": t, "subject": subject, "data_range": data_range, "data_bearing": data_bearing})
-	print ( "Robot Measurement Line Content:\n %s \n" %(str(robot_measurement_data)))
+	# print ( "Robot Measurement Line Content:\n %s \n" %(str(robot_measurement_data)))
 	return robot_measurement_data
 
 def getRobotOdometryData(robot_odometry_data_file):
@@ -205,8 +200,45 @@ def getRobotOdometryData(robot_odometry_data_file):
 			omega.append(updated_line_content[2])
 	
 	robot_odometry_data = pd.DataFrame({"t": t, "velocity": velocity, "omega": omega})
-	print ( "Robot Odometry Line Content:\n %s \n" %(str(robot_odometry_data)))
+	# print ( "Robot Odometry Line Content:\n %s \n" %(str(robot_odometry_data)))
 	return robot_odometry_data
+
+def sampleData(df_name, df, sample_time):
+	column_headers = df.columns.values.tolist()
+	print (" \n ")
+	print ("Dataframe name: %s" %(df_name))
+	print ("------------------------------------------------------")
+	print ("Column Headers: %s" %(column_headers))
+	num_samples = df.shape[0]
+
+	values = [df.at[0, "t"], df.at[(num_samples-1), "t"]]
+	total_timespan = values[1] - values[0]
+	new_num_samples = math.floor(total_timespan / sample_time) + 1
+
+	print ("Dataframe number of samples:  Original: %d and Resampled: %d" %(num_samples, new_num_samples))
+	print ("First and last time values: %s and total time span (in seconds): %f" %(str(values), total_timespan))
+
+	# if (df_name == "robot_groundtruth_data"):
+	# 	times, x, y, theta = [], [], [], []
+	# 	current_time = df["t"]
+
+	# 	x.append(df.at[0, "x"])
+	# 	y.append(df.at[0, "y"])
+	# 	theta.append(df.at[0, "theta"])
+
+	# 	i = 0
+	# 	# count = 0
+	# 	while (current_time <=  ):
+	# 		times.append(current_time)
+	# 		while (df.at["t", i] < current_time):
+	# 			if (i == num_samples):
+	# 				break
+	# 			i += 1
+	# 		interpolation_point = (current_time - df.at["t", i-1]) / (df.at["t", i] - df.at["t", i-1])
+	# 		new_x = df.at["x", i-1] + (df.at["x", i] - df.at["x", i-1]) * interpolation_point
+	# 		x.append(new_x)
+	# 		new_y = df.at["y", i-1] + (df.at["y", i] - df.at["y", i-1]) * interpolation_point
+	# 		y.append(new_y)
 
 if __name__ == "__main__":
 	print ("Number of arguments: %d " %(len(sys.argv)))
