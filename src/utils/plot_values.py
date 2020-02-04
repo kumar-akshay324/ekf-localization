@@ -47,4 +47,10 @@ def plotLandmarksGroundtruth(fig_ax, name, ld_gt_dict, barcodes_dict, col):
         fig_ax.grid()
         fig_ax.add_patch(e)
         fig_ax.autoscale()
-    
+
+def plotCollectedDataTimestamps(robot_groundtruth_timestamps, robot_measurement_timestamps, robot_odometry_timestamps):
+    plt.title("Time stamps")
+    plt.plot(robot_groundtruth_timestamps, range(len(robot_groundtruth_timestamps)), 'r*')
+    plt.plot(robot_measurement_timestamps, range(len(robot_measurement_timestamps)), 'go')
+    plt.plot(robot_odometry_timestamps, range(len(robot_odometry_timestamps)), 'b+')
+    plt.show()
