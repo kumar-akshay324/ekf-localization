@@ -21,9 +21,9 @@ PLOT_CONDITION_RESAMPLED = False
 PLOT_TIMESTAMPS = False
 PLOT_RESULTS = True
 
-DEBUG = False
+DEBUG = True
 DEBUG_MATRICES = False
-DEBUG_OPERATIONS = False
+DEBUG_OPERATIONS = True
 
 # Format for ROBOT DATA = [ sampled groundtruth, sampled measurement, sampled odometry] (all constituents are pandas Data frames)
 # Format for REFERENCE DATA = [ barcodes' dictionary, landmark groundtruth] (all constituents are pandas Data frames)
@@ -39,8 +39,8 @@ SAMPLE_TIME = 0.02
 ALPHA_VALUES = np.array([0.2, 0.03, 0.09, 0.08, 0.0, 0.0])
 
 # robot-dependent sensor noise parameters (see equation 9)
-SIGMA_RANGE = 2
-SIGMA_BEARING = 3
+SIGMA_RANGE = 0.02
+SIGMA_BEARING = 0.03
 SIGMA_ID = 1
 
 # --------------------------------------- #
@@ -48,10 +48,6 @@ SIGMA_ID = 1
 # Noise matrices
 Q_t = np.array([[SIGMA_RANGE**2, 0, 0], [0, SIGMA_BEARING**2, 0], [0, 0, SIGMA_ID**2]])
 print (Q_t)
-
-measurement_probability = 0
-numnber_robots = 1
-robot_number = 1
 
 # load and resample raw data from UTIAS data set
 # The robot's position groundtruth, odometry, and measurements 
@@ -148,7 +144,7 @@ def execute(start_timesample=0):
     errors = []
 
     # print ("Odometry Data: \n%s\n" %(str(ROBOT_DATA[2])))
-    for current_timesample in range(start_timesample, int(TOTAL_TIMESTEPS/10)):
+    for current_timesample in range(start_timesample, TOTAL_TIMESTEPS):
         print ("--------------------------------------")
         theta = pose_mean[2]
         current_timestamp = ROBOT_DATA[0].at[current_timesample, "t"]
@@ -208,9 +204,9 @@ def execute(start_timesample=0):
                 print ("V Matrix: \n%s \n" %(V_matrix))
 
             if DEBUG_OPERATIONS:
-                print ("Initial Pose: %s\nOdom Updated Pose: %s, EKF Updated Pose: \n" %(str(pose_mean), str(pose_updated), str(pose_final)))
+                print ("Init Ps: %s, Odom Upd. Ps: %s, EKF Upd. Ps: %s" %(str(pose_mean), str(pose_updated), str(pose_updated)))
                 print ("Measurement time sample: %d and time stamp: %f" %(previous_measurement_index, current_timestamp))
-                print ("Observations: \n%s" %(observations))
+                print ("Observations: \n%s\n" %(observations))
 
         observations_hat = []
         S = {}
@@ -220,53 +216,80 @@ def execute(start_timesample=0):
             # and makes search easier
             if observed_landmark_barcode in REFERENCE_DATA[0].keys():
                 global LANDMARKS
-                landmark_id = REFERENCE_DATA[0][observed_landmark_barcode]
+                correspondence_id = REFERENCE_DATA[0][observed_landmark_barcode]
+                if correspondence_id <= 5 or correspondence_id > 21:
+                    print ("Continued. Corres. ID: %d, Bar Code: %d" %(correspondence_id, observed_landmark_barcode))
+                    continue
+                landmark_id = correspondence_id
                 LANDMARKS[landmark_id] = df_row
 
                 # Actual position of the landmark just observed
+                print ("Landmark ID: %d\nBar Code: %d" %(landmark_id, observed_landmark_barcode))
+
                 landmark_groundtruth_pose = REFERENCE_DATA[1][landmark_id]
+                print ("Landmark Gt: %s" %(str(landmark_groundtruth_pose)))
+                print ("Pose Updated: %s" %(str(pose_updated)))
 
                 # Based on this actual pose, what is the expected measurement of the landmark
                 expected_distance_x  = (landmark_groundtruth_pose[0] - pose_updated[0])
-                expected_distance_y  = (landmark_groundtruth_pose[0] - pose_updated[1])
+                expected_distance_y  = (landmark_groundtruth_pose[1] - pose_updated[1])
                 expected_distance_sq =  expected_distance_x** 2 + expected_distance_y ** 2
                 expected_distance    =  math.sqrt(expected_distance_sq)
+                print ( "E_x: %f, E_y: %f, E_sq: %f, E_d: %f" %(expected_distance_x, expected_distance_y, expected_distance_sq, expected_distance))
 
                 expected_bearing = constraintBearing(math.atan2(expected_distance_y, expected_distance_x) - pose_updated[2])
                 observations_hat.append(pd.DataFrame({"subject": [landmark_id], "data_range": [expected_distance], \
                                                      "data_bearing": [expected_bearing]}))
+                print ( "E_bearing: %f" %(expected_bearing))
 
                 # Jacobian of measurement model
                 H_matrix = np.array([[-1 * (expected_distance_x/expected_distance), -1 * (expected_distance_y/expected_distance), 0], \
                                      [(expected_distance_y/expected_distance), -1 * (expected_distance_x / expected_distance), -1], \
-                                     [0, 0, 0]]) 
+                                     [0, 0, 0]])
+                print ("H_matrix: \n%s" %(str(H_matrix)))
 
                 # S for all the landmarks
+                S[landmark_id] = None
                 if H_matrix.shape[1] == pose_covariance_bar.shape[0]:
                     S[landmark_id] = np.matmul(np.matmul(H_matrix, pose_covariance_bar), H_matrix) + Q_t
+                    print ("S: \n%s\n" %(str(S[landmark_id])))
                 else:
                     print ("S calculation failed due to failed multiplication")
-                # Calculate the Kalman Gain
+                    continue
 
+                # Calculate the Kalman Gain
+                K_matrix = None
                 if (pose_covariance.shape[1] == H_matrix.shape[0]):
-                    K_matrix = np.matmul(np.matmul(pose_covariance, H_matrix.transpose()), np.linalg.inv(S[landmark_id]))
+                    a_matrix = np.matmul(pose_covariance, H_matrix.transpose())
+                    b_matrix = np.linalg.inv(S[landmark_id])
+                    K_matrix = np.matmul(a_matrix, b_matrix)
+                    print ("K: \n%s\nA:\n%s\nB:\n%s\n" %(str(K_matrix), str(a_matrix), str(b_matrix)))
                 else:
                     print ("Kalman Gain Failed due to failed multiplication")
-
+                    continue
+    
                 # Update pose and covariances
-                observations_delta_vector = np.array([(df_row["data_range"] - observations_hat[-1]["data_range"]), \
-                                               (df_row["data_bearing"] - observations_hat[-1]["data_bearing"]), \
-                                               0])
+                df_row_list = df_row.tolist()
+                obs_hat_list = observations_hat[-1].loc[0].tolist()
+                delta = [(item1-item2) for item1, item2 in zip(df_row_list, obs_hat_list)]
+                observations_delta_vector = np.array([delta[1], delta[2], 0])
+                print ("Observations Delta: \n%s\n" %(str(observations_delta_vector)))
 
                 if (K_matrix.shape[1] == observations_delta_vector.shape[0]):
                     print ("Shapes K: %s and Obs_delta: %s" %(str(K_matrix.shape), str(observations_delta_vector.shape)))
-                    print ("K: %s and Obs_delta: %s" %(str(K_matrix), str(observations_delta_vector)))
+                    # print ("K: %s and Obs_delta: %s" %(str(K_matrix), str(observations_delta_vector)))
+
                     pose_delta_list = list(np.matmul(K_matrix, observations_delta_vector))
+                    print ("Pose Up: %s and Pose: %s" %(str(pose_updated), str(pose_delta_list)))
+                    print (type(pose_updated), type(pose_delta_list))
+
                     if (len(pose_delta_list) == len(pose_updated)):
-                        pose_updated = [sum(element_a, element_b) for element_a, element_b in zip(pose_updated, pose_delta_list)]
+                        pose_updated = [element_a + element_b for (element_a, element_b) in zip(list(pose_updated), pose_delta_list)]
                         pose_covariance_bar = np.matmul((np.identity(3, dtype=float) - np.matmul(K_matrix, H_matrix)), pose_covariance_bar)
                 else:
                     print ("Pose and pose covariance update failed due to failed multiplication")
+            else:
+                print ("Obserrvation key: %d not found" %(observed_landmark_barcode))
 
         pose_mean = pose_updated
         pose_mean[2] = constraintBearing(pose_updated[2])
@@ -300,13 +323,13 @@ def execute(start_timesample=0):
 
         line_1 = plotRobotPose(fig_ax0, "Robot Pose Results", ROBOT_DATA[0], 'g')
         line_2 = plotRobotPose(fig_ax0, "Robot Pose Results", robot_pose_odom, 'r-')
-        line_3 = plotRobotPose(fig_ax0, "Robot Pose Results", robot_pose_final[0], 'b')
-        plt.legend((line__1, line_2, line_3), ('Groundtruth Poses', 'Odometry Poses', 'EKF Poses'))
+        line_3 = plotRobotPose(fig_ax0, "Robot Pose Results", robot_pose_final, 'b')
+        plt.legend((line_1, line_2, line_3), ('Groundtruth Poses', 'Odometry Poses', 'EKF Poses'))
 
-        line_4 = fig_ax1.plot(errors[0])
-        line_5 = fig_ax1.plot(errors[1])
-        line_6 = fig_ax1.plot(errors[2])
-        plt.legend((line__4, line_5, line_6), ('Error X', 'Error Y', 'Error Theta'))
+        line_4, = fig_ax1.plot(errors[0], 'r')
+        line_5, = fig_ax1.plot(errors[1], 'g')
+        line_6, = fig_ax1.plot(errors[2], 'b')
+        plt.legend((line_4, line_5, line_6), ('Error X', 'Error Y', 'Error Theta'))
 
         plt.show()
 
@@ -320,8 +343,8 @@ def getObservations(current_timestamp, previous_measurement_index):
         if (index > previous_measurement_index):
             if (row["t"] > (current_timestamp - delta_time)) and (row["t"] <= current_timestamp):
                 print ("Data Appended")
-                observations.append(row)
-            if (row["t"] < current_timestamp):
+                observations.append(row[["subject", "data_range", "data_bearing"]])
+            if (row["t"] > current_timestamp):
                 break
     if len(observations) == 0:
         return observations, previous_measurement_index
@@ -343,6 +366,7 @@ def constraintBearing(bearing):
         return bearing + 2 * math.pi
     elif bearing > math.pi:
         return bearing - 2 *  math.pi
+    return bearing
 
 if __name__ == "__main__":
 	print ("Number of arguments: %d " %(len(sys.argv)))
