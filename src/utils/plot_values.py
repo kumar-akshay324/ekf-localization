@@ -4,13 +4,11 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 
 def plotRobotPose(fig_ax, name, df, color):
-    times  = df["t"].tolist()
+    # times  = df["t"].tolist()
     data_x = df["x"].tolist()
     data_y = df["y"].tolist()
-
-    fig_ax.set_xlabel("Robot Groundtruth Y axis")
-    fig_ax.set_ylabel("Robot Groundtruth X axis")
-    fig_ax.plot(data_y, data_x, color)
+    line, = fig_ax.plot(data_y, data_x, color)
+    return line
 
 def plotRobotMeasurement(fig_ax0, fig_ax1, name, df, color):
     times  = df["t"].tolist()
